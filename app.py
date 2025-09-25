@@ -1,194 +1,213 @@
-import os
 from flask import Flask, render_template, request, send_file, jsonify
 import yt_dlp
+import os
 import threading
 import time
+import re
 import random
 from pathlib import Path
-import requests
-from urllib.parse import urlparse
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
+app.config['SECRET_KEY'] = 'your-secret-key-here'
 app.config['DOWNLOAD_FOLDER'] = 'downloads'
 
-# Create downloads folder
+# Create downloads folder with proper permissions
 download_path = Path(app.config['DOWNLOAD_FOLDER'])
 download_path.mkdir(exist_ok=True)
 
-class MultiPlatformDownloader:
+class DownloadManager:
     def __init__(self):
         self.downloads = {}
-        self.supported_platforms = {
-            'youtube': [
-                'youtube.com',
-                'youtu.be',
-                'www.youtube.com',
-                'm.youtube.com'
-            ],
-            'dailymotion': [
-                'dailymotion.com',
-                'www.dailymotion.com'
-            ],
-            'vimeo': [
-                'vimeo.com',
-                'www.vimeo.com'
-            ],
-            'facebook': [
-                'facebook.com',
-                'www.facebook.com',
-                'fb.watch'
-            ]
-        }
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+        ]
     
-    def identify_platform(self, url):
-        """Identify which platform the URL belongs to"""
-        try:
-            parsed_url = urlparse(url)
-            domain = parsed_url.netloc.lower()
-            
-            for platform, domains in self.supported_platforms.items():
-                if any(d in domain for d in domains):
-                    return platform
-            
-            return 'unknown'
-        except:
-            return 'unknown'
+    def get_random_user_agent(self):
+        return random.choice(self.user_agents)
     
     def validate_url(self, url):
-        """Validate if URL is from supported platform"""
-        platform = self.identify_platform(url)
-        return platform != 'unknown'
+        """Validate YouTube URL"""
+        youtube_patterns = [
+            r'(https?://)?(www\.)?youtube\.com/watch\?v=([^&]+)',
+            r'(https?://)?(www\.)?youtu\.be/([^?]+)',
+        ]
+        
+        url = url.strip()
+        for pattern in youtube_patterns:
+            if re.match(pattern, url):
+                return True
+        return False
     
     def get_video_info(self, url):
-        """Get video information with platform-specific handling"""
+        """Get video information"""
         try:
             if not self.validate_url(url):
-                return {'error': 'Unsupported video platform. Supported: YouTube, DailyMotion, Vimeo'}
+                return {'error': 'Invalid YouTube URL format'}
             
-            platform = self.identify_platform(url)
-            
-            # Platform-specific configurations
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': True,
                 'ignoreerrors': True,
+                'user_agent': self.get_random_user_agent(),
             }
-            
-            # Add platform-specific options
-            if platform == 'youtube':
-                ydl_opts.update({
-                    'extract_flat': False,
-                    'socket_timeout': 30,
-                })
-            elif platform == 'dailymotion':
-                ydl_opts.update({
-                    'extract_flat': True,
-                })
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 
                 if not info:
-                    return {'error': 'Video not found or unavailable'}
+                    return {'error': 'Could not fetch video information'}
                 
-                return {
+                video_info = {
                     'title': info.get('title', 'Unknown Title'),
                     'duration': self.format_duration(info.get('duration', 0)),
                     'thumbnail': info.get('thumbnail', ''),
-                    'uploader': info.get('uploader', 'Unknown'),
+                    'uploader': info.get('uploader', 'Unknown Uploader'),
                     'view_count': info.get('view_count', 0),
-                    'platform': platform
                 }
+                
+                return video_info
                 
         except Exception as e:
             return {'error': f'Error: {str(e)}'}
     
     def format_duration(self, seconds):
-        """Format duration"""
-        if not seconds: return "Unknown"
+        """Format duration in seconds to MM:SS"""
+        if not seconds:
+            return "Unknown"
         minutes = seconds // 60
         seconds = seconds % 60
         return f"{minutes}:{seconds:02d}"
     
     def download_video(self, url, format_type, quality, download_id):
-        """Download video with enhanced error handling"""
+        """Download video with proper completion handling"""
         try:
-            platform = self.identify_platform(url)
+            # Sanitize download path
+            safe_download_folder = Path(app.config['DOWNLOAD_FOLDER']).absolute()
+            safe_download_folder.mkdir(exist_ok=True)
             
+            # Initialize download info
             self.downloads[download_id] = {
-                'status': 'downloading',
+                'status': 'preparing',
                 'progress': 0,
                 'filename': None,
                 'error': None,
-                'platform': platform
+                'video_title': None
             }
             
-            download_path = Path(app.config['DOWNLOAD_FOLDER'])
-            download_path.mkdir(exist_ok=True)
+            # Get video info first
+            video_info = self.get_video_info(url)
+            if 'error' in video_info:
+                self.downloads[download_id]['status'] = 'error'
+                self.downloads[download_id]['error'] = video_info['error']
+                return
             
-            # Platform-specific download options
+            self.downloads[download_id]['video_title'] = video_info['title']
+            self.downloads[download_id]['status'] = 'downloading'
+            
+            # Configure download options
             ydl_opts = {
-                'outtmpl': str(download_path / f'%(title).100s.%(ext)s'),
+                'outtmpl': str(safe_download_folder / '%(title).100s.%(ext)s'),
                 'progress_hooks': [lambda d: self.progress_hook(d, download_id)],
                 'ignoreerrors': False,
+                'no_warnings': True,
+                'user_agent': self.get_random_user_agent(),
+                'socket_timeout': 60,
+                'retries': 3,
             }
             
-            # For non-YouTube platforms, use simpler approach
-            if platform != 'youtube':
-                ydl_opts.update({
-                    'format': 'best',
-                    'no_check_certificate': True,
-                })
-            else:
-                # For YouTube, try multiple approaches
-                ydl_opts.update({
-                    'format': 'best[ext=mp4]/best',
-                    'retries': 3,
-                    'fragment_retries': 3,
-                })
-            
+            # Set format based on user selection
             if format_type == 'mp3':
-                ydl_opts.update({
-                    'format': 'bestaudio/best',
-                    'postprocessors': [{
-                        'key': 'FFmpegExtractAudio',
-                        'preferredcodec': 'mp3',
-                    }],
-                })
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
-                
-                if format_type == 'mp3':
-                    filename = filename.rsplit('.', 1)[0] + '.mp3'
-                
-                if Path(filename).exists():
-                    self.downloads[download_id]['status'] = 'completed'
-                    self.downloads[download_id]['filename'] = filename
+                ydl_opts['format'] = 'bestaudio/best'
+                ydl_opts['postprocessors'] = [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                }]
+            elif format_type == 'm4a':
+                ydl_opts['format'] = 'bestaudio[ext=m4a]/bestaudio'
+            else:
+                if quality == 'best':
+                    ydl_opts['format'] = 'best[ext=mp4]/best'
+                elif quality == '720p':
+                    ydl_opts['format'] = 'best[height<=720][ext=mp4]'
+                elif quality == '480p':
+                    ydl_opts['format'] = 'best[height<=480][ext=mp4]'
+                elif quality == '360p':
+                    ydl_opts['format'] = 'best[height<=360][ext=mp4]'
                 else:
+                    ydl_opts['format'] = 'worst[ext=mp4]'
+            
+            # Perform download
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                try:
+                    info_dict = ydl.extract_info(url, download=True)
+                    actual_filename = ydl.prepare_filename(info_dict)
+                    
+                    # Handle file extension changes for audio
+                    if format_type == 'mp3':
+                        actual_filename = actual_filename.rsplit('.', 1)[0] + '.mp3'
+                    elif format_type == 'm4a':
+                        actual_filename = actual_filename.rsplit('.', 1)[0] + '.m4a'
+                    
+                    # Wait a moment for file to be completely written
+                    time.sleep(1)
+                    
+                    # Verify file was created and is accessible
+                    if self.verify_download_completion(actual_filename):
+                        self.downloads[download_id]['status'] = 'completed'
+                        self.downloads[download_id]['filename'] = actual_filename
+                        self.downloads[download_id]['progress'] = 100
+                        logger.info(f"Download completed successfully: {actual_filename}")
+                    else:
+                        self.downloads[download_id]['status'] = 'error'
+                        self.downloads[download_id]['error'] = 'Download completed but file verification failed'
+                        logger.error(f"File verification failed: {actual_filename}")
+                        
+                except Exception as e:
                     self.downloads[download_id]['status'] = 'error'
-                    self.downloads[download_id]['error'] = 'Download failed - file not created'
+                    self.downloads[download_id]['error'] = f'Download error: {str(e)}'
+                    logger.error(f"Download error: {str(e)}")
                     
         except Exception as e:
-            error_msg = str(e)
-            if '403' in error_msg or 'Forbidden' in error_msg:
-                self.downloads[download_id]['error'] = (
-                    f'{platform.capitalize()} is blocking requests. ' 
-                    f'Try a different video or platform like DailyMotion/Vimeo.'
-                )
-            else:
-                self.downloads[download_id]['error'] = f'Download error: {error_msg}'
+            self.downloads[download_id]['status'] = 'error'
+            self.downloads[download_id]['error'] = f'System error: {str(e)}'
+            logger.error(f"System error: {str(e)}")
+    
+    def verify_download_completion(self, filename):
+        """Verify that download completed successfully"""
+        try:
+            file_path = Path(filename)
+            if file_path.exists():
+                if file_path.stat().st_size > 0:
+                    with open(file_path, 'rb') as f:
+                        f.read(100)
+                    return True
+            return False
+        except:
+            return False
     
     def progress_hook(self, d, download_id):
-        """Update progress"""
-        if download_id in self.downloads and d['status'] == 'downloading':
+        """Update download progress with completion detection"""
+        if download_id not in self.downloads:
+            return
+            
+        if d['status'] == 'downloading':
             if d.get('total_bytes'):
                 percent = int((d['downloaded_bytes'] / d['total_bytes']) * 100)
                 self.downloads[download_id]['progress'] = percent
+            elif d.get('total_bytes_estimate'):
+                percent = int((d['downloaded_bytes'] / d['total_bytes_estimate']) * 100)
+                self.downloads[download_id]['progress'] = min(percent, 99)
+        
+        elif d['status'] == 'finished':
+            self.downloads[download_id]['progress'] = 100
 
-downloader = MultiPlatformDownloader()
+download_manager = DownloadManager()
 
 @app.route('/')
 def index():
@@ -196,48 +215,81 @@ def index():
 
 @app.route('/get_info', methods=['POST'])
 def get_video_info():
-    url = request.json.get('url', '').strip()
-    if not url:
-        return jsonify({'error': 'Please enter a video URL'})
-    
-    info = downloader.get_video_info(url)
-    return jsonify(info)
+    try:
+        url = request.json.get('url', '').strip()
+        
+        if not url:
+            return jsonify({'error': 'Please enter a YouTube URL'})
+        
+        video_info = download_manager.get_video_info(url)
+        return jsonify(video_info)
+        
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'})
 
 @app.route('/download', methods=['POST'])
 def download_video():
-    url = request.json.get('url', '').strip()
-    format_type = request.json.get('format', 'mp4')
-    quality = request.json.get('quality', 'best')
-    
-    if not url or not downloader.validate_url(url):
-        return jsonify({'error': 'Please enter a valid video URL'})
-    
-    download_id = f"dl_{int(time.time())}_{random.randint(1000, 9999)}"
-    
-    thread = threading.Thread(
-        target=downloader.download_video,
-        args=(url, format_type, quality, download_id)
-    )
-    thread.daemon = True
-    thread.start()
-    
-    return jsonify({'download_id': download_id})
+    try:
+        url = request.json.get('url', '').strip()
+        format_type = request.json.get('format', 'mp4')
+        quality = request.json.get('quality', 'best')
+        
+        if not url or not download_manager.validate_url(url):
+            return jsonify({'error': 'Please enter a valid YouTube URL'})
+        
+        # Generate unique download ID
+        download_id = f"dl_{int(time.time())}_{random.randint(1000, 9999)}"
+        
+        # Start download in separate thread
+        thread = threading.Thread(
+            target=download_manager.download_video,
+            args=(url, format_type, quality, download_id)
+        )
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'download_id': download_id,
+            'message': 'Download started successfully'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to start download: {str(e)}'})
 
 @app.route('/progress/<download_id>')
 def get_progress(download_id):
-    if download_id in downloader.downloads:
-        return jsonify(downloader.downloads[download_id])
-    return jsonify({'error': 'Download not found'})
+    if download_id in download_manager.downloads:
+        download_info = download_manager.downloads[download_id]
+        
+        if download_info['status'] == 'completed' and download_info['filename']:
+            if not Path(download_info['filename']).exists():
+                download_info['status'] = 'error'
+                download_info['error'] = 'Downloaded file not found'
+        
+        return jsonify(download_info)
+    return jsonify({'error': 'Download session not found'})
 
 @app.route('/download_file/<download_id>')
 def download_file(download_id):
-    if download_id in downloader.downloads:
-        info = downloader.downloads[download_id]
-        if info['status'] == 'completed' and info['filename']:
-            if Path(info['filename']).exists():
-                return send_file(info['filename'], as_attachment=True)
-    return jsonify({'error': 'File not found'}), 404
+    try:
+        if download_id in download_manager.downloads:
+            download_info = download_manager.downloads[download_id]
+            if (download_info['status'] == 'completed' and 
+                download_info['filename'] and 
+                Path(download_info['filename']).exists()):
+                
+                filename = Path(download_info['filename']).name
+                return send_file(
+                    download_info['filename'],
+                    as_attachment=True,
+                    download_name=filename
+                )
+        
+        return jsonify({'error': 'File not available for download'}), 404
+        
+    except Exception as e:
+        return jsonify({'error': f'Download error: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True, host='0.0.0.0', port=5000)
+    
