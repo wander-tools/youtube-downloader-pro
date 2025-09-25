@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ডাউনলোড সফল - YouTube ডাউনলোডার</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✅ ডাউনলোড সফল!</h1>
+            <p>আপনার ভিডিওটি ডাউনলোড প্রস্তুত</p>
+        </div>
+
+        <div class="success-container">
+            <div class="success-icon">🎉</div>
+            
+            <div class="video-info-success">
+                <h3>"{{ video_title }}"</h3>
+                <p class="success-message">ভিডিওটি সফলভাবে ডাউনলোড হয়েছে</p>
+            </div>
+
+            <div class="download-actions">
+                <a href="{{ download_url }}" class="download-btn" download>
+                    📥 ফাইল ডাউনলোড করুন
+                </a>
+                
+                <div class="file-info">
+                    <p><strong>ফাইল টাইপ:</strong> 
+                        {% if filename.endswith('.mp3') %} 
+                            অডিও (MP3)
+                        {% else %}
+                            ভিডিও (MP4)
+                        {% endif %}
+                    </p>
+                    <p><strong>নোট:</strong> ফাইলটি ১ ঘন্টা পর অটো ডিলিট হবে</p>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <a href="{{ url_for('index') }}" class="back-btn">
+                    🔄 আরেকটি ভিডিও ডাউনলোড করুন
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

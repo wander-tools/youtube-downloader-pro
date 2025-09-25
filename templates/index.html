@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <!-- PWA Meta Tags -->
+<link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+<meta name="theme-color" content="#6366f1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YTDownloader Pro - Download YouTube Videos Instantly</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="theme-toggle">
+        <button id="themeToggle" class="theme-btn">
+            <i class='bx bx-sun'></i>
+        </button>
+    </div>
+
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <i class='bx bx-play-circle'></i>
+                <span>YTDownloader Pro</span>
+            </div>
+            <h1>Download YouTube Videos Instantly</h1>
+            <p class="subtitle">Free, fast, and unlimited YouTube video downloads. Support for MP4, MP3, and multiple quality options.</p>
+        </header>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class='bx bx-hd'></i>
+                </div>
+                <div class="feature-content">
+                    <div class="feature-value">100%</div>
+                    <div class="feature-label">HD Unlimited</div>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class='bx bx-dollar-circle'></i>
+                </div>
+                <div class="feature-content">
+                    <div class="feature-value">Free</div>
+                    <div class="feature-label">No Cost</div>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class='bx bx-star'></i>
+                </div>
+                <div class="feature-content">
+                    <div class="feature-value">Quality</div>
+                    <div class="feature-label">Multiple Options</div>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class='bx bx-download'></i>
+                </div>
+                <div class="feature-content">
+                    <div class="feature-value">Unlimited</div>
+                    <div class="feature-label">Downloads</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="download-section">
+            <div class="section-header">
+                <h2><i class='bx bx-cloud-download'></i> Download YouTube Video</h2>
+                <p class="instruction">Paste your YouTube URL below to get started</p>
+            </div>
+
+            <form id="downloadForm" class="download-form">
+                <div class="input-group">
+                    <label for="url" class="input-label">
+                        <i class='bx bx-link'></i>
+                        YouTube Video URL
+                    </label>
+                    <div class="input-wrapper">
+                        <input type="text" id="url" name="url" placeholder="https://www.youtube.com/watch?v=..." class="url-input">
+                        <button type="button" class="clear-btn" id="clearBtn">
+                            <i class='bx bx-x'></i>
+                        </button>
+                    </div>
+                    <div class="input-hint">Paste any YouTube video URL to automatically check availability</div>
+                </div>
+
+                <div class="options-grid">
+                    <div class="option-group">
+                        <label for="format" class="option-label">
+                            <i class='bx bx-file'></i>
+                            Format
+                        </label>
+                        <select id="format" name="format" class="option-select">
+                            <option value="mp4">Video (MP4)</option>
+                            <option value="mp3">Audio (MP3)</option>
+                            <option value="m4a">Audio (M4A)</option>
+                        </select>
+                    </div>
+
+                    <div class="option-group">
+                        <label for="quality" class="option-label">
+                            <i class='bx bx-trending-up'></i>
+                            Quality
+                        </label>
+                        <select id="quality" name="quality" class="option-select">
+                            <option value="best">Best Quality</option>
+                            <option value="720p">720p HD</option>
+                            <option value="480p">480p</option>
+                            <option value="360p">360p</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="download-btn" id="downloadBtn">
+                    <i class='bx bx-download'></i>
+                    <span>Download Now</span>
+                    <div class="btn-loading" id="btnLoading">
+                        <div class="spinner"></div>
+                    </div>
+                </button>
+            </form>
+
+            <div id="videoInfo" class="video-info-card" style="display: none;">
+                <div class="video-header">
+                    <i class='bx bx-video'></i>
+                    <h3>Video Information</h3>
+                </div>
+                <div class="video-content">
+                    <div class="video-thumbnail">
+                        <img id="thumbnail" src="" alt="Video Thumbnail">
+                    </div>
+                    <div class="video-details">
+                        <h4 id="videoTitle" class="video-title"></h4>
+                        <div class="video-meta">
+                            <span class="meta-item">
+                                <i class='bx bx-user'></i>
+                                <span id="videoUploader"></span>
+                            </span>
+                            <span class="meta-item">
+                                <i class='bx bx-time'></i>
+                                <span id="videoDuration"></span>
+                            </span>
+                            <span class="meta-item">
+                                <i class='bx bx-show'></i>
+                                <span id="videoViews"></span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="progressSection" class="progress-section" style="display: none;">
+                <div class="progress-header">
+                    <h4 id="downloadTitle">Preparing Download...</h4>
+                    <div class="progress-stats">
+                        <span id="progressText">0%</span>
+                    </div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                </div>
+                <div id="downloadLink" class="download-complete" style="display: none;">
+                    <div class="success-message">
+                        <i class='bx bx-check-circle'></i>
+                        <span>Download Complete!</span>
+                    </div>
+                    <a href="#" id="fileDownload" class="download-file-btn">
+                        <i class='bx bx-download'></i>
+                        Download Your File
+                    </a>
+                </div>
+            </div>
+
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+            <div class="tips-card">
+                <div class="tips-header">
+                    <i class='bx bx-bulb'></i>
+                    <h4>Tips for Successful Downloads</h4>
+                </div>
+                <div class="tips-content">
+                    <div class="tip-item">
+                        <i class='bx bx-check'></i>
+                        <span>Ensure you have a stable internet connection</span>
+                    </div>
+                    <div class="tip-item">
+                        <i class='bx bx-check'></i>
+                        <span>Try different quality options if one fails</span>
+                    </div>
+                    <div class="tip-item">
+                        <i class='bx bx-check'></i>
+                        <span>M4A format works without additional software</span>
+                    </div>
+                    <div class="tip-item">
+                        <i class='bx bx-check'></i>
+                        <span>Most videos download in under 2 minutes</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <p>&copy; 2024 YTDownloader Pro. All rights reserved. | Made with <i class='bx bx-heart'></i></p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
