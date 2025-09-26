@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
+    <!-- PWA Meta Tags -->
+<link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+<meta name="theme-color" content="#6366f1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YTDownloader Pro - Download YouTube Videos Instantly</title>
@@ -53,7 +58,6 @@
                         </label>
                         <select id="format" name="format" class="option-select">
                             <option value="mp4">Video (MP4)</option>
-                            <option value="mp3">Audio (MP3)</option>
                             <option value="m4a">Audio (M4A)</option>
                         </select>
                     </div>
@@ -173,7 +177,6 @@
                     <div class="feature-label">Downloads</div>
                 </div>
             </div>
-            
         </div>
 
             <div class="tips-card">

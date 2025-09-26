@@ -20,6 +20,7 @@ class YouTubeDownloader {
         
         this.initEventListeners();
         this.loadTheme();
+        this.performSilentUpdateCheck(); // Check for updates on app start
     }
     
     initEventListeners() {
@@ -43,6 +44,16 @@ class YouTubeDownloader {
                 this.getVideoInfo();
             }
         });
+    }
+    
+    async performSilentUpdateCheck() {
+        // Silent update check when app loads (no UI feedback)
+        try {
+            await fetch('/check_update');
+            console.log('Silent update check completed');
+        } catch (error) {
+            console.log('Silent update check failed (normal for first run)');
+        }
     }
     
     showUrlCheckingIndicator() {
